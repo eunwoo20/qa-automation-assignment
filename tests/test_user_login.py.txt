@@ -1,0 +1,40 @@
+import pytest
+from playwright.sync_api import sync_playwright, expect
+
+@pytest.fixture(scope="session")
+def browser():
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        yield browser
+        browser.close()
+
+@pytest.fixture()
+def page(browser):
+    context = browser.new_context()
+    page = context.new_page()
+    yield page
+    context.close()
+
+def test_user_login(page):
+    page.goto("https://app.workflowpro.com/login")
+
+    page.fill("#email", "admin@company1.com")
+    page.fill("#password", "password123")
+    page.click("#login-btn")
+
+    # Wait for redirect & dashboard element
+    expect(page).to_have_url(lambda url: "/dashboard" in url)
+    expect(page.locator(".welcome-message")).to_be_visible()
+
+def test_multi_tenant_access(page):
+    page.goto("https://app.workflowpro.com/login")
+    page.fill("#email", "user@company2.com")
+    page.fill("#password", "password123")
+    page.click("#login-btn")
+
+    # Wait for projects to load
+    projects = page.locator(".project-card")
+    expect(projects.first).to_be_visible()
+
+    for i in range(projects.count()):
+        assert "Company2" in projects.nth(i).text_content()

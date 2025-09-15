@@ -1,0 +1,47 @@
+import pytest
+import requests
+from playwright.sync_api import sync_playwright, expect
+
+API_BASE = "https://api.workflowpro.com/api/v1"
+WEB_BASE = "https://app.workflowpro.com"
+MOBILE_CAPS = {"device": "iPhone 13", "os": "iOS", "realMobile": "true"}  # BrowserStack example
+
+@pytest.fixture(scope="session")
+def api_token():
+    # Assume we have a login endpoint to fetch token
+    return "FAKE_API_TOKEN"
+
+def test_project_creation_flow(api_token):
+    tenant_id = "company1"
+
+    # 1. API: Create project
+    payload = {"name": "Test Project", "description": "UI/API validation", "team_members": ["user1"]}
+    headers = {"Authorization": f"Bearer {api_token}", "X-Tenant-ID": tenant_id}
+    response = requests.post(f"{API_BASE}/projects", json=payload, headers=headers)
+    assert response.status_code == 200
+    project_id = response.json()["id"]
+
+    # 2. Web UI: Verify project display
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        page.goto(f"{WEB_BASE}/login")
+        page.fill("#email", "admin@company1.com")
+        page.fill("#password", "password123")
+        page.click("#login-btn")
+
+        projects = page.locator(".project-card")
+        expect(projects.filter(has_text="Test Project")).to_be_visible()
+        browser.close()
+
+    # 3. Mobile: Check accessibility via BrowserStack
+    # (pseudocode - assume BrowserStack integration utility exists)
+    # mobile_driver = browserstack.launch(MOBILE_CAPS)
+    # mobile_driver.login(tenant_id)
+    # assert mobile_driver.find("Test Project")
+
+    # 4. Tenant Isolation
+    headers_other = {"Authorization": f"Bearer {api_token}", "X-Tenant-ID": "company2"}
+    resp_other = requests.get(f"{API_BASE}/projects/{project_id}", headers=headers_other)
+    assert resp_other.status_code == 403  # Forbidden
+
